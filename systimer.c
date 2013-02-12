@@ -3,6 +3,9 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 
+#define SYSTIMER_MOD_AUTH "Techplex"
+#define SYSTIMER_MOD_DESC "SysTimer for Raspberry Pi"
+#define SYSTIMER_MOD_SDEV "SysTimerRPi" //supported devices
 
 static int __init rpisystimer_minit(void)
 {
@@ -18,3 +21,10 @@ static void __exit rpisystimer_mcleanup(void)
 
 module_init(rpisystimer_minit);
 module_exit(rpisystimer_mcleanup);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR(SYSTIMER_MOD_AUTH);
+MODULE_DESCRIPTION(SYSTIMER_MOD_DESC);
+MODULE_SUPPORTED_DEVICE(SYSTIMER_MOD_SDEV);
+
+
