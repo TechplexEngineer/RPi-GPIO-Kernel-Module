@@ -7,9 +7,12 @@
 #define SYSTIMER_MOD_DESC "SysTimer for Raspberry Pi"
 #define SYSTIMER_MOD_SDEV "SysTimerRPi" //supported devices
 
+static int sint __initdata = 0;
+
 static int __init rpisystimer_minit(void)
 {
 	printk(KERN_NOTICE "Systimer Loaded\n");
+	printk(KERN_INFO "Var: %d\n", sint);
 	return 0;
 }
 
