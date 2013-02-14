@@ -1,21 +1,32 @@
-
-#include <linux/module.h>	//
+/etc/watchdog.conf
+#include <linux/module.h>	//module stuff
 #include <linux/kernel.h>	//printk
-#include <linux/init.h>		//
+#include <linux/init.h>		//__init
 #include <linux/stat.h>		//permissions
-#include <linux/device.h>	//
-#include <linux/fs.h>		//
+#include <linux/device.h>	//Device class stuff
+#include <linux/fs.h>		//File operation structures
 #include <linux/err.h>		//Error checking macros
 
 #define SYSTIMER_MOD_AUTH "Techplex"
 #define SYSTIMER_MOD_DESC "SysTimer for Raspberry Pi"
 #define SYSTIMER_MOD_SDEV "SysTimerRPi" //supported devices
 
+struct systimer_data {
+	int st_mjr;
+	struct class *st_cls;
+};
+
+static struct systimer_data std = {
+	.st_mjr = 0,
+	.st_cls = NULL,
+};
+
 static int sint __initdata = 0;
 static int systimer_mode = 0;
 
-static struct class *systimer_class = NULL;
-static int systimer_major=0;
+///static struct class *std.st_cls = NULL;
+///static int std.st_mjr=0;
+
 //Device special files have two numbers associated with them
 // -major index into array
 static const struct file_operations systimer_fops = {
@@ -27,33 +38,43 @@ static const struct file_operations systimer_fops = {
 module_param(systimer_mode, int, S_IRUSR|S_IWUSR|S_IRGRP);
 MODULE_PARM_DESC(systimer_mode, "Systimer mode");
 
+//! /brief Sets permissions correctly on created device special file
+static char *st_devnode(struct device *dev, umode_t *mode)
+{
+	if (mode) *mode = 0666;//adding a 0 makes number octal
+	return NULL;
+}
+
 static int __init rpisystimer_minit(void)
 {
 	struct device *dev;
 	//register char device
-	systimer_major = register_chrdev(0, "systimer", &systimer_fops);//character device
-	if (systimer_major < 0) {
+	std.st_mjr = register_chrdev(0, "systimer", &systimer_fops);//character device
+	if (std.st_mjr < 0) {
 		printk(KERN_INFO "Cannot Register");
-		return systimer_major;
+		return std.st_mjr;
 	}
-	printk(KERN_INFO "Major #%d\n", systimer_major);
+	printk(KERN_INFO "Major #%d\n", std.st_mjr);
 
 	//Create class
-	systimer_class = class_create(THIS_MODULE, "systimer_class");
-	if (IS_ERR(systimer_class)) {
+	std.st_cls = class_create(THIS_MODULE, "std.st_cls");
+	if (IS_ERR(std.st_cls)) {
 		printk(KERN_INFO "Cannot get class\n");
 		//Need to unregister
-		unregister_chrdev(systimer_major, "systimer");	//Kerneldevelopes use gotos on errors
-		return PTR_ERR(systimer_class);		//Gets errro code so one can lookup the errpr
+		unregister_chrdev(std.st_mjr, "systimer"/etc/watchdog.conf);	//Kerneldevelopes use gotos on errors
+		return PTR_ERR(std.st_cls);		//Gets errro code so one can lookup the errpr
 	}
-	//Create Device															name of dev/spec.file
-	dev = device_create(systimer_class, NULL, MKDEV(systimer_major, 0), NULL, "systimer");
+
+	std.st_cls->devnode = st_devnode;
+
+	//Create Device													name of dev/spec.file
+	dev = device_create(std.st_cls, NULL, MKDEV(std.st_mjr, 0), (void*)&std, "systimer");
 	if (IS_ERR(dev)) {
 		printk(KERN_INFO "Cannot create device\n");
 		//remove classs
-		class_destroy(systimer_class);
+		class_destroy(std.st_cls);
 		//Unregister
-		unregister_chrdev(systimer_major, "systimer");
+		unregister_chrdev(std.st_mjr, "systimer");
 		return PTR_ERR(dev);
 	}	
 
@@ -65,9 +86,9 @@ static int __init rpisystimer_minit(void)
 
 static void __exit rpisystimer_mcleanup(void)
 {
-	device_destroy(systimer_class, MKDEV(systimer_major, 0));
-	class_destroy(systimer_class);
-	unregister_chrdev(systimer_major, "systimer");
+	device_destroy(std.st_cls, MKDEV(std.st_mjr, 0));
+	class_destroy(std.st_cls);
+	unregister_chrdev(std.st_mjr, "systimer");
 
 	printk(KERN_NOTICE "Goodbye\n");
 }
