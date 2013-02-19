@@ -1,4 +1,3 @@
-/etc/watchdog.conf
 #include <linux/module.h>	//module stuff
 #include <linux/kernel.h>	//printk
 #include <linux/init.h>		//__init
@@ -10,6 +9,9 @@
 #define SYSTIMER_MOD_AUTH "Techplex"
 #define SYSTIMER_MOD_DESC "SysTimer for Raspberry Pi"
 #define SYSTIMER_MOD_SDEV "SysTimerRPi" //supported devices
+
+static int st_open(struct inode*inode, struct file *filp);
+static int st_release(struct inode *inode, struct file *filp);
 
 struct systimer_data {
 	int st_mjr;
@@ -30,13 +32,28 @@ static int systimer_mode = 0;
 //Device special files have two numbers associated with them
 // -major index into array
 static const struct file_operations systimer_fops = {
-	.owner=THIS_MODULE,
-	.open=NULL,
-	.release=NULL,
+	.owner		= THIS_MODULE,
+	.open		= st_open,
+	.release 	= st_release,
 };
 
 module_param(systimer_mode, int, S_IRUSR|S_IWUSR|S_IRGRP);
 MODULE_PARM_DESC(systimer_mode, "Systimer mode");
+
+//! handles user opening device special file
+static int st_open(struct inode*inode, struct file *filp) 
+{
+	//How to interact with your device
+	if ((filp->f_flags & O_ACCMODE) == O_WRONLY) return -EOPNOTSUPP; //Operation not supported
+	if ((filp->f_flags & O_ACCMODE) == O_RDWR) return -EOPNOTSUPP; //Operation not supported
+	return 0; //all good
+}
+
+//! handles user closing the device special file
+static int st_release(struct inode *inode, struct file *filp)
+{
+	return 0;
+}
 
 //! /brief Sets permissions correctly on created device special file
 static char *st_devnode(struct device *dev, umode_t *mode)
@@ -61,7 +78,7 @@ static int __init rpisystimer_minit(void)
 	if (IS_ERR(std.st_cls)) {
 		printk(KERN_INFO "Cannot get class\n");
 		//Need to unregister
-		unregister_chrdev(std.st_mjr, "systimer"/etc/watchdog.conf);	//Kerneldevelopes use gotos on errors
+		unregister_chrdev(std.st_mjr, "systimer");	//Kerneldevelopes use gotos on errors
 		return PTR_ERR(std.st_cls);		//Gets errro code so one can lookup the errpr
 	}
 

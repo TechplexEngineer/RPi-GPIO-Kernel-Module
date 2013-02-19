@@ -9,14 +9,26 @@
 int main (int argc, char*argv[])
 {
 	int fd;
-	fd = open("/dev/systimer", O_RDONLY);
-
-	if (fd < 0) {
-		perror("open");
-		return errno;
+	fd = open("/dev/systimer", O_RDWR);
+	if(fd) {
+		perror("open(O_RDWR)");
+	} else {
+		close(fd);
 	}
-	sleep(20);
-	close(fd);
+
+	fd = open("/dev/systimer", O_WRONLY);
+	if(fd) {
+		perror("open(O_WRONLY)");
+	} else {
+		close(fd);
+	}
+
+	fd = open("/dev/systimer", O_RDONLY);
+	if(fd) {
+		perror("open(O_RDONLY)");
+	} else {
+		close(fd);
+	}
 	return 0;
 }
 
