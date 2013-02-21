@@ -6,6 +6,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "systimer.h"
+
 int main (int argc, char*argv[])
 {
 	int fd;

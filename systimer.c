@@ -6,12 +6,20 @@
 #include <linux/fs.h>		//File operation structures
 #include <linux/err.h>		//Error checking macros
 
+#include <linux/ioctl.h>	
+#include <linux/io.h>		//read and write from the memory
+#include <asm/uaccess.h>	//translation from userspace ptr to kernelspace
+#include <mach/platform.h>	//pull address of system timer
+
+#include "systimer.h"
+
 #define SYSTIMER_MOD_AUTH "Techplex"
 #define SYSTIMER_MOD_DESC "SysTimer for Raspberry Pi"
 #define SYSTIMER_MOD_SDEV "SysTimerRPi" //supported devices
 
 static int st_open(struct inode*inode, struct file *filp);
 static int st_release(struct inode *inode, struct file *filp);
+static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 
 struct systimer_data {
 	int st_mjr;
@@ -32,9 +40,10 @@ static int systimer_mode = 0;
 //Device special files have two numbers associated with them
 // -major index into array
 static const struct file_operations systimer_fops = {
-	.owner		= THIS_MODULE,
-	.open		= st_open,
-	.release 	= st_release,
+	.owner			= THIS_MODULE,
+	.open			= st_open,
+	.release 		= st_release,
+	.unlocked_ioctl = st_ioctl,
 };
 
 module_param(systimer_mode, int, S_IRUSR|S_IWUSR|S_IRGRP);
@@ -53,6 +62,19 @@ static int st_open(struct inode*inode, struct file *filp)
 static int st_release(struct inode *inode, struct file *filp)
 {
 	return 0;
+}
+
+
+static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	uint64_t st;
+	switch (cmd) {
+		case SYSTIMER_READ:
+			st = readl(__io_address(ST_BASE + 0x04));
+			put_user(st, (uint64_t __user *)arg);	//this is potentially problemsome
+			return 0;
+	}
+	return -EINVAL;
 }
 
 //! /brief Sets permissions correctly on created device special file
