@@ -1,0 +1,10 @@
+.*
+*.o
+*.ko
+*.order
+*.swp
+*.symvers
+*.mod.c
+02/
+cli
+client/client
