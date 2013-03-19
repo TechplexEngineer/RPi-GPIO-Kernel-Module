@@ -14,8 +14,7 @@ int main (int argc, char*argv[])
 {
 	int fd;
 	int ret;
-	uint64_t s,e;
-	uint32_t delay = 5e+6; //5 secs
+	uint64_t s,e, w=80000;
 
 	fd = open("/dev/systimer", O_RDONLY);
 	if(!fd) {
@@ -24,33 +23,35 @@ int main (int argc, char*argv[])
 	}
 
 	ret  = ioctl(fd, SYSTIMER_READ, &s);
-	if (ret < 0) {
-		perror("ioctl");
-		close(fd);
-		return errno;
-	} else {
-		printf("Start: %llu\n",s);
-	}
+	// if (ret < 0) {
+	// 	perror("ioctl");
+	// 	close(fd);
+	// 	return errno;
+	// } else {
+	// 	printf("Start: %llu\n",s);
+	// }
 
-	ret  = ioctl(fd, SYSTIMER_DELAY, &delay);
-	if (ret < 0) {
-		perror("ioctl");
-		close(fd);
-		return errno;
-	} else {
-		printf("Wait successfull\n");
-	}
+	ret  = ioctl(fd, SYSTIMER_DELAY, &w);
+	// if (ret < 0) {
+	// 	perror("ioctl");
+	// 	close(fd);
+	// 	return errno;
+	// } else {
+	// 	printf("Wait successfull\n");
+	// }
 
 	ret  = ioctl(fd, SYSTIMER_READ, &e);
-	if (ret < 0) {
-		perror("ioctl");
-		close(fd);
-		return errno;
-	} else {
-		printf("End: %llu\n",e);
-	}
-
+	// if (ret < 0) {
+	// 	perror("ioctl");
+	// 	close(fd);
+	// 	return errno;
+	// } else {
+	// 	printf("End: %llu\n",e);
+	// }
+	printf("Start: %llu\n",s);
+	printf("End: %llu\n",e);
 	printf("Delta: %lld\n", e-s);
+	printf("Wait: %lld\n", w);
 
 /*
 	fd = open("/dev/systimer", O_RDWR);
