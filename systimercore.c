@@ -76,6 +76,7 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	uint32_t cmp;
 	DEFINE_WAIT(waiter); //add ourselves to wait queue
 	struct stll *temp;
+	uint32_t	val;
 
 	st = readl(__io_address(ST_BASE + 0x04));
 
@@ -107,17 +108,22 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		case SYSTIMER_READ:
 			put_user(st, (uint64_t __user *)arg);	//this is potentially problemsome, why?
 			return 0;
+
 		case SYSTIMER_LL_FIRST:
 			temp = stll_first(std.st_lld->st_timell);
 			put_user(temp->t, (uint64_t __user *)arg);
-		return 0;
+			return 0;
 		case SYSTIMER_ll_PRINT:
 			stll_print(std.st_lld->st_timell);	//this prints to the syslog
-		return 0;
+			return 0;
 		case SYSTIMER_ll_INS:
-		return 0;
+			get_user(val, (uint32_t __user *)arg);
+			stll_insert(std.st_lld->st_timell, val);
+			return 0;
 		case SYSTIMER_ll_DEL:
-		return 0;
+			get_user(val, (uint32_t __user *)arg);
+			stll_delete(std.st_lld->st_timell, val);
+			return 0;
 	}
 	//	return -EINVAL; //Error Message: invalid argument
 	return -ENOTTY;	//Error Message: inappropriate IOCTL for device
@@ -133,13 +139,13 @@ static irqreturn_t st_irqhandler(int irq, void *dev_id)
 	enable_irq(IRQ_TIMER3);
 
 	n = stll_first (st_dev->st_lld->st_timell);
-    spin_lock (&(st_dev->st_lld->st_lock));
+	spin_lock (&(st_dev->st_lld->st_lock));
 
-    if (n->next->next && n->next != NULL) {
-        writel ((n->next->next->t) & 0xFFFFFFFF, __io_address (ST_BASE + 0x10));
-    }
+	if (n->next->next && n->next != NULL) {
+		writel ((n->next->next->t) & 0xFFFFFFFF, __io_address (ST_BASE + 0x10));
+	}
 
-    spin_unlock (&(st_dev->st_lld->st_lock));
+	spin_unlock (&(st_dev->st_lld->st_lock));
 
 	wake_up_interruptible(&(st_dev->st_wq));	//wakes up all tasks on queue. asks to be scheduled again. When time is allocated, code is entered from "schedule()" call
 
@@ -165,6 +171,7 @@ static int __init rpisystimer_minit(void)
 {
 	struct device *dev;
 	int ret;									//return value of request IRQ
+	struct stll *temp;
 
 	init_waitqueue_head(&std.st_wq);			//create the wait queue
 
@@ -214,6 +221,14 @@ static int __init rpisystimer_minit(void)
 	//init the spinlock
 	spin_lock_init(&(std.st_lld->st_lock));
 	// init the linked list
+	if (std.st_lld == NULL) {
+		printk(KERN_NOTICE "std.st_lld ITS NULL\n");
+		return 0;
+	}
+	if (std.st_lld->st_timell == NULL)
+		printk(KERN_NOTICE "std.st_lld->st_timell ITS NULL\n");
+
+
 	std.st_lld->st_timell = stll_init();
 	return 0;
 }

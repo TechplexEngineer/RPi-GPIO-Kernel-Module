@@ -12,7 +12,7 @@ struct stll_data {
 	spinlock_t st_lock;							//spinlock init in module init
 };
 
-//this is devined in systimerll.c
+//this is defined in systimerll.c
 extern struct stll_data stlld; //stlld: SysTimer Linked List Data
 
 
