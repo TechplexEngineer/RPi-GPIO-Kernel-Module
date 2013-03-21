@@ -75,8 +75,8 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	uint64_t st, st_next;
 	uint32_t cmp;
 	DEFINE_WAIT(waiter); //add ourselves to wait queue
-	struct stll *temp;
 	uint32_t	val;
+	struct stll *n = NULL;
 
 	st = readl(__io_address(ST_BASE + 0x04));
 
@@ -85,13 +85,17 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			if (filp->f_flags&O_NONBLOCK) {
 				return -EAGAIN;					//tell the user this call would block
 			}
-			get_user(cmp, (uint32_t __user *)arg);
+			get_user (cmp, (uint32_t __user *) arg);
 			st_next = st + cmp;
+			stll_insert (std.st_lld->st_timell, st_next);
 
-			//need protection here:
-			//-Race conditions with mutliple programs
-			//-chop off the upper bits as the cmp register is only 32 bits
-			writel(st_next&0xFFFFFFFF, __io_address(ST_BASE + 0x10));
+			n = stll_first (std.st_lld->st_timell);
+
+			spin_lock (&(std.st_lld->st_lock));
+			// Masking 64 to 32bit :: chop off the upper bits as the cmp register is only 32 bits
+			writel ((n->next->t) & 0xFFFFFFFF,	__io_address (ST_BASE + 0x10));
+
+			spin_unlock (&(std.st_lld->st_lock));
 
 			while (readl(__io_address(ST_BASE+0x04)) < st_next) { //(systimer value < next interrupt)
 
@@ -101,17 +105,19 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				}
 				finish_wait(&std.st_wq, &waiter);
 				if (signal_pending(current)) {	//current is a pointer to current process (this)
+					stll_delete (std.st_lld->st_timell, st_next);
 					return -ERESTARTSYS;//ctrl+c
 				}
 			}
+			stll_delete (std.st_lld->st_timell, st_next);
 			return 0;
 		case SYSTIMER_READ:
 			put_user(st, (uint64_t __user *)arg);	//this is potentially problemsome, why?
 			return 0;
 
 		case SYSTIMER_LL_FIRST:
-			temp = stll_first(std.st_lld->st_timell);
-			put_user(temp->t, (uint64_t __user *)arg);
+			n = stll_first(std.st_lld->st_timell);
+			put_user(n->t, (uint64_t __user *)arg);
 			return 0;
 		case SYSTIMER_ll_PRINT:
 			stll_print(std.st_lld->st_timell);	//this prints to the syslog
@@ -171,7 +177,6 @@ static int __init rpisystimer_minit(void)
 {
 	struct device *dev;
 	int ret;									//return value of request IRQ
-	struct stll *temp;
 
 	init_waitqueue_head(&std.st_wq);			//create the wait queue
 
@@ -213,7 +218,7 @@ static int __init rpisystimer_minit(void)
 
 	ret = request_irq(IRQ_TIMER1, st_irqhandler, 0, "st_timer1", (void*)&std);
 	if (ret) {
-		printk(KERN_ALERT "Cannot get IRQ\n");
+		printk(KERN_ALERT "IRQ Request DENIED\n");
 	} else {
 		printk(KERN_INFO "IRQ Request Granted\n");
 		std.st_irq = IRQ_TIMER1;
@@ -221,14 +226,6 @@ static int __init rpisystimer_minit(void)
 	//init the spinlock
 	spin_lock_init(&(std.st_lld->st_lock));
 	// init the linked list
-	if (std.st_lld == NULL) {
-		printk(KERN_NOTICE "std.st_lld ITS NULL\n");
-		return 0;
-	}
-	if (std.st_lld->st_timell == NULL)
-		printk(KERN_NOTICE "std.st_lld->st_timell ITS NULL\n");
-
-
 	std.st_lld->st_timell = stll_init();
 	return 0;
 }
@@ -238,6 +235,7 @@ static void __exit rpisystimer_mcleanup(void)
 	if (std.st_irq) { 							//if we did get interrupt registed
 		free_irq(IRQ_TIMER1, (void *)&std);		//free it
 	}
+  stll_free (std.st_lld->st_timell);
 
 	device_destroy(std.st_cls, MKDEV(std.st_mjr, 0));
 	class_destroy(std.st_cls);
