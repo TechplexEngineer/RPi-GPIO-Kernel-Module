@@ -9,6 +9,7 @@
 //Global variables:
 struct stll_data {
 	struct stll *st_timell; 					//pointer to linked list head
+	struct kmem_cache *ll_kcache;
 	spinlock_t st_lock;							//spinlock init in module init
 };
 

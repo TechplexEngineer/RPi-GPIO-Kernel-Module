@@ -211,7 +211,9 @@ static int __init rpisystimer_minit(void)
 		//Unregister
 		unregister_chrdev(std.st_mjr, "systimer");
 		return PTR_ERR(dev);
-	}
+	}	printk("std.st_lld->st_timell is null");
+	if(std.st_lld->ll_kcache == NULL)
+		printk("std.st_lld->ll_kcache is null");
 
 	printk(KERN_NOTICE "Systimer Loaded\n");
 	printk(KERN_INFO "Mode Param: %d\n", systimer_mode); //passing parameters
@@ -225,6 +227,8 @@ static int __init rpisystimer_minit(void)
 	}
 	//init the spinlock
 	spin_lock_init(&(std.st_lld->st_lock));
+	//create a cache
+	std.st_lld->ll_kcache = kmem_cache_create("ST_LL_Cache", sizeof(struct stll), 0, SLAB_HWCACHE_ALIGN, NULL);
 	// init the linked list
 	std.st_lld->st_timell = stll_init();
 	return 0;
@@ -235,7 +239,15 @@ static void __exit rpisystimer_mcleanup(void)
 	if (std.st_irq) { 							//if we did get interrupt registed
 		free_irq(IRQ_TIMER1, (void *)&std);		//free it
 	}
-  stll_free (std.st_lld->st_timell);
+	if(std.st_lld->st_timell == NULL)
+		printk("std.st_lld->st_timell is null");
+	if(std.st_lld->ll_kcache == NULL)
+		printk("std.st_lld->ll_kcache is null");
+	if (std.st_lld->ll_kcache)
+	{
+		stll_free (std.st_lld->st_timell);
+		kmem_cache_destroy (std.st_lld->ll_kcache);
+	}
 
 	device_destroy(std.st_cls, MKDEV(std.st_mjr, 0));
 	class_destroy(std.st_cls);

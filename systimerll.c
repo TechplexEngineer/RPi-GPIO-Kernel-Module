@@ -18,6 +18,7 @@
 
 struct stll_data stlld = { //stlld: SysTimer Linked List Data
 	.st_timell = NULL,
+	.ll_kcache = NULL,
 };
 
 // Get the first element in the list
@@ -55,7 +56,8 @@ struct stll *stll_init(void)
 
 	// Create space
 	//l=(struct stll *)malloc(sizeof(struct stll));
-	l=(struct stll *)kmalloc(sizeof(struct stll), GFP_KERNEL);
+	//l=(struct stll *)kmalloc(sizeof(struct stll), GFP_KERNEL);
+	l=(struct stll *)kmem_cache_alloc(stlld.ll_kcache, GFP_KERNEL);
 	if (l==NULL) {
 		//perror("malloc");
 		return NULL;
@@ -89,7 +91,8 @@ struct stll *stll_insert(struct stll *l, uint32_t t)
 	spin_unlock(&stlld.st_lock);
 	// Add new AFTER c
 	//f=(struct stll *)malloc(sizeof(struct stll));
-	f=(struct stll *)kmalloc(sizeof(struct stll), GFP_KERNEL);
+	//f=(struct stll *)kmalloc(sizeof(struct stll), GFP_KERNEL);
+	f=(struct stll *)kmem_cache_alloc(stlld.ll_kcache, GFP_KERNEL);
 	if (f==NULL) {
 		printk(KERN_INFO "kmem cache alloc failed");
 		//perror("malloc");
@@ -127,7 +130,7 @@ struct stll *stll_delete(struct stll *l, uint32_t t)
 		c->prev->next=NULL;
 	}
 	spin_unlock(&stlld.st_lock);
-	kfree(p);
+	kmem_cache_free(stlld.ll_kcache, p);
 	return l;									//changed from c(dangling pinter) to l(start of the list)
 }
 
@@ -138,8 +141,8 @@ void stll_free(struct stll *l)
 
 	while (c->next) {
 		c=c->next;
-		kfree(c->prev);	//the last element isn't destroyed
+		kmem_cache_free(stlld.ll_kcache, c->prev);	//the last element isn't destroyed
 	}
-	kfree(c);
+	kmem_cache_free(stlld.ll_kcache, c);
 	return;
 }
