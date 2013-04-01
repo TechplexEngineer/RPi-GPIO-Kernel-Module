@@ -8,16 +8,22 @@
 #include <sys/ioctl.h>
 #include <stdint.h>
 
+#include <readline/readline.h>
+#include <readline/history.h>
+
+
 #include "systimer.h"
 
 int main(int argc, char * argv[])
 {
 	int fd;
 	int ret;
-	char * fret=NULL;
+	//char * fret=NULL;
 	uint32_t v=0;
 	uint64_t c=0;
-	char buf[80];
+	char* buf = NULL;
+
+	using_history();
 
 	fd = open("/dev/systimer", O_RDONLY);
 	if(!fd) {
@@ -25,22 +31,21 @@ int main(int argc, char * argv[])
 		return errno;
 	}
 
-	// Print the list
-	ret = ioctl(fd, SYSTIMER_ll_PRINT);
-	if (ret < 0) {
-		perror("ioctl");
-	}
-	printf("[I]nsert or [D]elete [Q]uit. FMT: I 2 \n");
-	printf("[W]ait or [R]ead \n");
+	printf("[I]nsert or [D]elete or [Q]uit. FMT: I 2 \n");
+	printf("[W]ait or [R]ead or [P]rint \n");
 
 	while (1) {
 		// Get new item/ delete item
-		printf("Command: ");
-		fflush(stdout);
-		fret = fgets(buf,80,stdin);
-		if (fret == NULL)
-			break; //on error be done
-		v=atoi(&buf[2]);
+		buf = readline ("Command: ");
+		if (buf == NULL) {
+			break;	//NULL on eof
+		}
+		add_history(buf);
+
+		if (buf[1] == ' ')
+			v=atoi(&buf[2]);
+		else
+			v=atoi(&buf[1]);
 		// Action based on input
 		if ((buf[0]=='i')||(buf[0]=='I')) {
 			ret = ioctl(fd, SYSTIMER_ll_INS, &v);
@@ -64,15 +69,19 @@ int main(int argc, char * argv[])
 				perror("ioctl");
 			}
 			printf("Count is: %llu\n", c);
+		} else if((buf[0]=='p')||(buf[0]=='P')) {
+			// Print the list
+			ret = ioctl(fd, SYSTIMER_ll_PRINT);
+			if (ret < 0) {
+				perror("ioctl");
+			}
 		} else if ((buf[0]=='q')||(buf[0]=='Q')) {
 			break;
-		}
-		// Print the list
-		ret = ioctl(fd, SYSTIMER_ll_PRINT);
-		if (ret < 0) {
-			perror("ioctl");
+		} else {
+			printf("Unknown Command \n");
 		}
 	}
+	clear_history();
 	printf("\n");
 	close(fd);
 	return 0;

@@ -20,3 +20,6 @@ kclean:
 
 client:
 	$(MAKE) -C $(CODE_DIR)
+
+install: all
+	sudo insmod systimer.ko

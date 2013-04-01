@@ -37,13 +37,14 @@ void stll_print(struct stll *l)
 {
 	struct stll *f=stll_first(l);
 
-	printk(KERN_DEBUG "\n%10p | %10p %10p %llu\n",f, f->prev, f->next, f->t);
+	//printk(KERN_DEBUG "\n%10p | %10p %10p %llu\n",f, f->prev, f->next, f->t);
+	printk(KERN_DEBUG "\n%llu\n", f->t);
 	spin_lock(&stlld.st_lock);
 	while (f->next) {
 		f=f->next;
 		//this is bad because printk is complex, so we hold the lock a long time
 		//copy f to a temporary variable
-		printk(KERN_DEBUG "%10p | %10p %10p %llu\n",f, f->prev, f->next, f->t);
+		printk(KERN_DEBUG "%llu\n", f->t);
 	}
 	spin_unlock(&stlld.st_lock);
 	return;
@@ -111,17 +112,27 @@ struct stll *stll_insert(struct stll *l, uint32_t t)
 struct stll *stll_delete(struct stll *l, uint32_t t)
 {
 	struct stll *c=stll_first(l);
-	struct stll *p=NULL;						//so deletion can be outside lock
+	struct stll *p = NULL; //previous one
+	int found = 0;
 
 	if (t==0) return l;	// Not a possible time
 	spin_lock(&stlld.st_lock);
 	while (c) {
-		if (t==(c->t)) break;
+		if (t==(c->t)) {
+			found = 1;
+			break;
+		}
+		p = c; 
 		c=c->next;
-		p=c;
 	}
-	if (!c) return NULL;	// Entry not found
-	if (c->prev==NULL) return l;	// Cannot remove the first one
+	if (!c || !found) {// Entry not found
+		spin_unlock(&stlld.st_lock);
+		return NULL;
+	}
+	if (c->prev==NULL) { // Cannot remove the first one
+		spin_unlock(&stlld.st_lock);
+		return l;
+	}
 	// Remove the current entry c
 	if (c->next) {	// Middle of list
 		c->prev->next=c->next;
@@ -129,9 +140,9 @@ struct stll *stll_delete(struct stll *l, uint32_t t)
 	} else {	// end of list
 		c->prev->next=NULL;
 	}
+	kmem_cache_free(stlld.ll_kcache, c);
 	spin_unlock(&stlld.st_lock);
-	kmem_cache_free(stlld.ll_kcache, p);
-	return l;									//changed from c(dangling pinter) to l(start of the list)
+	return p;						//changed from c(dangling pinter) to p(prev)
 }
 
 // Free all list element memory
