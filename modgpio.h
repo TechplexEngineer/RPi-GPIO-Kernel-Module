@@ -1,16 +1,26 @@
 #ifndef __RPI_GPIO_H__
 #define __RPI_GPIO_H__
 //magical IOCTL number
-#define SYSTIMER_IOC_MAGIC 'k'
+#define GPIO_IOC_MAGIC 'k'
 
-#define GPIO_READ			_IOR(SYSTIMER_IOC_MAGIC, 0x90, unsigned char) //in: pin to read				//out: value 			//the value read the value
-#define GPIO_WRITE			_IOW(SYSTIMER_IOC_MAGIC, 0x90, unsigned char) //in: struct(pin, data)		//out: NONE
+struct gpio_data_read {
+	char pin;
+	char data;
+};
 
-#define GPIO_REQUEST		_IOR(SYSTIMER_IOC_MAGIC, 0x90, unsigned char) //in: pin to reque			//out: success/fail 	// request exclusive write privalages
-#define GPIO_FREE			_IOR(SYSTIMER_IOC_MAGIC, 0x90, unsigned char) //in: pin to free 			//out: success/fail?
+struct gpio_data_mode {
+	char pin;
+	char data;
+};
 
-#define GPIO_TOGGLE			_IOW(SYSTIMER_IOC_MAGIC, 0x90, unsigned char) //in: pin to toggle			//out: NONE
-#define GPIO_MODE			_IOW(SYSTIMER_IOC_MAGIC, 0x90, unsigned char) //in: struct (pin, mode[i/o])
+#define GPIO_READ			_IOR(GPIO_IOC_MAGIC, 0x90, char) //in: pin to read				//out: value 			//the value read the value
+#define GPIO_WRITE			_IOW(GPIO_IOC_MAGIC, 0x91, struct gpio_data_read) //in: struct(pin, data)		//out: NONE
+
+#define GPIO_REQUEST		_IOR(GPIO_IOC_MAGIC, 0x92, char) //in: pin to reque			//out: success/fail 	// request exclusive write privalages
+#define GPIO_FREE			_IOR(GPIO_IOC_MAGIC, 0x93, char) //in: pin to free 			//out: success/fail?
+
+#define GPIO_TOGGLE			_IOW(GPIO_IOC_MAGIC, 0x94, char) //in: pin to toggle			//out: NONE
+#define GPIO_MODE			_IOW(GPIO_IOC_MAGIC, 0x95, struct gpio_data_mode) //in: struct (pin, mode[i/o])
 
 
 

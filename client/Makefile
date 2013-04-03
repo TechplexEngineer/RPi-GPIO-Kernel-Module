@@ -1,5 +1,5 @@
 TARGET	= client 
-OBJS 	= client.o
+OBJS 	= gpioclient.o
 CFLAGS	= -Wall -O2 -I ../
 LIBS	= -L/usr/local/lib -I/usr/local/include -lreadline
 

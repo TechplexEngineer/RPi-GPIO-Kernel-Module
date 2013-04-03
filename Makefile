@@ -1,6 +1,6 @@
 
-obj-m += systimer.o
-systimer-objs := systimerll.o systimercore.o
+obj-m += modgpio.o
+#systimer-objs := systimerll.o systimercore.o
 
 CODE_DIR = client
 
@@ -22,4 +22,9 @@ client:
 	$(MAKE) -C $(CODE_DIR)
 
 install: all
-	sudo insmod systimer.ko
+	sudo insmod modgpio.ko
+
+uninstall:
+	-sudo rmmod modgpio
+
+reinstall: uninstall install
