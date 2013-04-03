@@ -83,7 +83,7 @@ static int st_release(struct inode *inode, struct file *filp)
 #define GPCLR1 0x2C
 
 #define GPLEV0 0x34
-#define GPLEV1 0x38 
+#define GPLEV1 0x38
 
 //! Processes IOCTL calls
 static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
@@ -92,44 +92,37 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	// uint32_t addy;
 	uint32_t test;
 	uint8_t temp;
-	// char currVal = 
+	uint32_t currVal;
+	struct gpio_data_write wdata;
 	pin = 17;
 	switch (cmd) {
 		case GPIO_READ:
-			// get_user (pin, (char __user *) arg);
-			// printk(KERN_INFO "Pin to write: %d\n", pin);
-			// // test = readl(__io_address());
-			// // printk(KERN_INFO "Test Data: 0x%llX\n", test);
-			// addy = GPIO_BASE; //should be =0x20200000
-			// printk(KERN_INFO "MEM: 0x%lX\n", addy);
-			// //enable output
-			// writel (1<<18,	__io_address (addy + 0x04));
-			// //turn on
-			// writel (1<<16,	__io_address (addy + 0x40));
-
-			temp = readb(__io_address (GPIO_BASE + 0x34 + (pin/8)));
-			// temp >>= (pin/8)-1;
-			// temp &= 0x01;
+			get_user (pin, (char __user *) arg);
+			printk(KERN_INFO "Pin to read: %d\n", pin);
 
 			test = readl(__io_address (GPIO_BASE + 0x34 + pin/32)); //move to next long if pin/32 ==1
 			temp = test >> (pin%32); 	//right shift by the remainder
 			temp &= 0x01;				//clear upper bits
 			printk(KERN_INFO "Test: 0x%.8lX Temp: 0x%x\n",test, temp);
 
-			// printk(KERN_INFO "ptr: 0x%lX\n", __io_address (GPIO_BASE + 0x34));
-
 			return 0;
 		case GPIO_WRITE:
-			
-			// get_user (pin, (char __user *) arg);
-			// printk(KERN_INFO "Pin to write: %d\n", pin);
-			
+
+			//get_user (wdata, (struct gpio_data_write __user *) arg);
+			copy_from_user(&wdata, arg, sizeof(struct gpio_data_write));
+			printk(KERN_INFO "[WRITE] Pin: %d Val:%d\n", wdata.pin, wdata.data);
+
 			//enable output
 			writel (1<<(pin%10)*3,	__io_address (GPIO_BASE + (pin/10)*4));
 			printk(KERN_INFO "val: 0x%lX addy: 0x%lX\n",1<<(pin%10)*3 ,__io_address (GPIO_BASE + (pin/10)*4));
 			//turn on
-			writel (1<<pin,	__io_address (GPIO_BASE + 0x1C));//0x40
-			printk(KERN_INFO "val2: 0x%lX addy2: 0x%lX\n", 1<<pin, __io_address (GPIO_BASE + 0x1C));
+			//currVal = readl(__io_address (GPIO_BASE + 0x34 + pin/32));
+			if (wdata.data == 1)//set
+				writel (1<<pin,	__io_address (GPIO_BASE + GPSET0));
+			else //clear
+				writel (1<<pin,	__io_address (GPIO_BASE + GPCLR0));
+			
+			printk(KERN_INFO "val2: 0x%lX addy2: 0x%lX\n", currVal, __io_address (GPIO_BASE + 0x1C));
 			return 0;
 		case GPIO_REQUEST:
 		case GPIO_FREE:

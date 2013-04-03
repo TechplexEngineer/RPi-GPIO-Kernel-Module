@@ -76,8 +76,13 @@ int main(int argc, char * argv[])
 			printf("check syslog\n");
 		} else 
 		if ((buf[0]=='w')||(buf[0]=='w')) {
+			printf("v: %d\n",v);
 			int pin = 17;
-			ret = ioctl(fd, GPIO_WRITE, &pin);
+			struct gpio_data_write mystruct = {
+				.pin = 17,
+				.data = v,
+			};
+			ret = ioctl(fd, GPIO_WRITE, &mystruct);
 			if (ret < 0) {
 				perror("ioctl");
 			}
