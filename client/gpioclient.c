@@ -34,13 +34,13 @@ int main(int argc, char * argv[])
 
 	//printf("[I]nsert or [D]elete or [Q]uit. FMT: I 2 \n");
 	//printf("[W]ait or [R]ead or [P]rint \n");
-	printf("[R]ead [W]rite [C]heckout [F]ree\n");
+	printf("[R]ead [W]rite [C]heckout [F]ree [T]oggle [M]ode [Q]uit\n");
 
 	while (1) {
 		if (buf != NULL)
 			free(buf);
 		// Get new item/ delete item
-		buf = readline ("Command: ");
+		buf = readline ("\e[01;34mCommand:\e[00m ");
 		if (buf == NULL) {
 			break;	//NULL on eof
 		}
@@ -54,16 +54,16 @@ int main(int argc, char * argv[])
 		// Action based on input
 
 		if ((buf[0]=='r')||(buf[0]=='R')) {
-			//int pin = 17;
+			pin = v;
 			ret = ioctl(fd, GPIO_READ, &pin);
 			if (ret < 0) {
 				perror("ioctl");
 			}
-			printf("check syslog %d\n", pin);
+			printf("Pin %d value=%d\n", v, pin);
 		} else
 		if ((buf[0]=='w')||(buf[0]=='W')) {
 
-			if (buf[1] == ' ') //this causes segfault when second param not provided
+			if (buf[1] == ' ')
 				found = strstr(&buf[3], " ");
 			else
 				found = strstr(&buf[2], " ");
@@ -73,35 +73,65 @@ int main(int argc, char * argv[])
 			}
 
 			pin = atoi(found);//17;//get from user
-			printf("v:%d pin:%d\n",v, pin);
 
-			struct gpio_data_write mystruct = {
+			struct gpio_data_write mydwstruct = {								//@todo Sheaff won't like this
 				.pin = pin, //ideally we'd get both from the user
 				.data = v,
 			};
-			ret = ioctl(fd, GPIO_WRITE, &mystruct);
-			if (ret < 0) {
+			ret = ioctl(fd, GPIO_WRITE, &mydwstruct);
+			if (ret < 0)
 				perror("ioctl");
-			}
-			printf("check syslog\n");
+			else
+				printf("Wrote %d to pin %d\n",mydwstruct.data, mydwstruct.pin);
 		} else
 		if ((buf[0]=='c')||(buf[0]=='C')) {
-			printf("v: %d\n",v);
+			//printf("v: %d\n",v);
 			pin = v;
 			ret = ioctl(fd, GPIO_REQUEST, &pin);
-			if (ret < 0) {
+			if (ret < 0)
 				perror("ioctl");
-			}
-			printf("check syslog\n");
+			else
+				printf("Reserved pin %d\n", pin);
 		} else
 		if ((buf[0]=='f')||(buf[0]=='F')) {
-			printf("v: %d\n",v);
+			// printf("v: %d\n",v);
 			pin = v;
 			ret = ioctl(fd, GPIO_FREE, &pin);
-			if (ret < 0) {
+			if (ret < 0)
 				perror("ioctl");
+			else
+				printf("Freed pin %d\n", pin);
+		} else
+		if ((buf[0]=='t')||(buf[0]=='T')) {
+			// printf("pin: %d\n",v);
+			pin = v;
+			ret = ioctl(fd, GPIO_TOGGLE, &pin);
+			if (ret < 0)
+				perror("ioctl");
+			else
+				printf("Toggled pin %d\n", pin);
+		} else
+		if ((buf[0]=='m')||(buf[0]=='M')) {
+			if (buf[1] == ' ')
+				found = strstr(&buf[3], " ");
+			else
+				found = strstr(&buf[2], " ");
+			if (found == NULL) {
+				printf("Missing 2nd parameter. Usage \"m <val> <pin>\"\n");
+				continue;
 			}
-			printf("check syslog\n");
+
+			pin = atoi(found);//17;//get from user
+
+			struct gpio_data_mode mydmstruct = {								//OR THIS!
+				.pin = pin, //ideally we'd get both from the user
+				.data = v?MODE_OUTPUT:MODE_INPUT,
+			};
+			ret = ioctl(fd, GPIO_MODE, &mydmstruct);
+			if (ret < 0)
+				perror("ioctl");
+			else
+				printf("Set pin %d as %s \n", mydmstruct.pin, mydmstruct.data?"OUTPUT":"INPUT");
 		} else
 		if ((buf[0]=='q')||(buf[0]=='Q')) {
 			break;

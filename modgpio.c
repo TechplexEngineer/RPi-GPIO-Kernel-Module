@@ -207,11 +207,23 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			}
 			return -EFAULT;	//Bad address??
 		case GPIO_TOGGLE:
+			get_user (pin, (int __user *) arg);
 			///check for write perms, else die
-			// read the current value
-			// toggle the bit
-			// write the value
-			return 0;
+			if (pin > PIN_ARRAY_LEN || pin < 0 || pins[pin] == PIN_NULL_PID) {
+				return -EFAULT;	//Bad address
+			} else if (pins[pin] == current->pid) {
+				val = readl(__io_address (GPIO_BASE + GPLEV0 + pin/32)); //move to next long if pin/32 ==1
+				flag = val >> (pin%32); 	//right shift by the remainder
+				flag &= 0x01;				//clear upper bits
+				printk(KERN_DEBUG "[TOGGLE] Pin:%d From:%.1d To:%.1d\n", pin, flag, flag?0:1);
+				if (flag != 1)//set
+					writel (1<<pin,	__io_address (GPIO_BASE + GPSET0));
+				else //clear
+					writel (1<<pin,	__io_address (GPIO_BASE + GPCLR0));
+				put_user(flag?0:1, (uint8_t __user *)arg);
+				return 0;
+			}
+			return -EACCES;	//Permission denied
 		case GPIO_MODE:
 			ret = copy_from_user(&mdata, (struct gpio_data_mode __user *)arg, sizeof(struct gpio_data_mode));
 			if (ret != 0) {
@@ -229,9 +241,9 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				writel((~(7<<((mdata.pin%10)*3)) & val),	__io_address (GPIO_BASE + (mdata.pin/10)*4));
 
 				//@@ Need to bitwise OR here --check
-				if (mdata.data == MODE_INPUT)
+				if (mdata.data == MODE_OUTPUT)
 					writel((1<<(mdata.pin%10)*3 | val),	__io_address (GPIO_BASE + (mdata.pin/10)*4)); //enable output 0b001
-				//else if (mdata.data == MODE_OUTPUT)
+				//else if (mdata.data == MODE_INPUT)
 					// if we clear the bits above nothing needs doing here
 					//writel(1<<(mdata.pin%10)*3,	__io_address (GPIO_BASE + (mdata.pin/10)*4)); //enable input 0b000
 				else

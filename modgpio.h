@@ -21,7 +21,7 @@ struct gpio_data_mode {
 #define GPIO_REQUEST		_IOW(GPIO_IOC_MAGIC, 0x92, int) //in: pin to reque			//out: success/fail 	// request exclusive write privalages
 #define GPIO_FREE			_IOW(GPIO_IOC_MAGIC, 0x93, int) //in: pin to free 			//out: success/fail?
 
-#define GPIO_TOGGLE			_IOW(GPIO_IOC_MAGIC, 0x94, int) //in: pin to toggle			//out: NONE
+#define GPIO_TOGGLE			_IOWR(GPIO_IOC_MAGIC, 0x94, int) //in: pin to toggle			//out: new value
 #define GPIO_MODE			_IOW(GPIO_IOC_MAGIC, 0x95, struct gpio_data_mode) //in: struct (pin, mode[i/o])
 
 
