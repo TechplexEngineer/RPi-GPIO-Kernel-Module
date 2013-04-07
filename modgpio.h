@@ -15,11 +15,11 @@ struct gpio_data_mode {
 	PIN_MODE_t data;
 };
 
-#define GPIO_READ			_IOR(GPIO_IOC_MAGIC, 0x90, int) //in: pin to read				//out: value 			//the value read the value
+#define GPIO_READ			_IOWR(GPIO_IOC_MAGIC, 0x90, int) //in: pin to read				//out: value 			//the value read the value
 #define GPIO_WRITE			_IOW(GPIO_IOC_MAGIC, 0x91, struct gpio_data_write) //in: struct(pin, data)		//out: NONE
 
-#define GPIO_REQUEST		_IOR(GPIO_IOC_MAGIC, 0x92, int) //in: pin to reque			//out: success/fail 	// request exclusive write privalages
-#define GPIO_FREE			_IOR(GPIO_IOC_MAGIC, 0x93, int) //in: pin to free 			//out: success/fail?
+#define GPIO_REQUEST		_IOW(GPIO_IOC_MAGIC, 0x92, int) //in: pin to reque			//out: success/fail 	// request exclusive write privalages
+#define GPIO_FREE			_IOW(GPIO_IOC_MAGIC, 0x93, int) //in: pin to free 			//out: success/fail?
 
 #define GPIO_TOGGLE			_IOW(GPIO_IOC_MAGIC, 0x94, int) //in: pin to toggle			//out: NONE
 #define GPIO_MODE			_IOW(GPIO_IOC_MAGIC, 0x95, struct gpio_data_mode) //in: struct (pin, mode[i/o])

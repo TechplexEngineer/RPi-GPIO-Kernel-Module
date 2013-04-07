@@ -118,8 +118,10 @@ static int st_release(struct inode *inode, struct file *filp)
 	int i;
 	//check to see if the releasing process has any pins checked out, and free them
 	for (i=0; i<PIN_ARRAY_LEN; i++) {
-		if (pins[i] == current->pid)
+		if (pins[i] == current->pid) {
+			printk(KERN_DEBUG "[FREE] Pin:%d From:%d\n", i, current->pid);
 			pins[i] = PIN_UNASSN;
+		}
 	}
 	return 0;
 }
@@ -220,13 +222,18 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				return -EFAULT;	//Bad address
 			} else if (pins[mdata.pin] == current->pid) { //make sure we have access
 				printk(KERN_DEBUG "[MODE] Pin:%d From:%d\n", mdata.pin, current->pid);
-				//@todo: clear the three bits before writing //*(gpio+((g)/10)) &= ~(7<<(((g)%10)*3))
-				//@@ Need to bitwise OR here
+
+				//get the current value
+				val = readl(__io_address (GPIO_BASE + GPLEV0 + mdata.pin/32));
+				//@todo: clear the three bits before writing --done //*(gpio+((g)/10)) &= ~(7<<(((g)%10)*3))
+				writel((~(7<<((mdata.pin%10)*3)) & val),	__io_address (GPIO_BASE + (mdata.pin/10)*4));
+
+				//@@ Need to bitwise OR here --check
 				if (mdata.data == MODE_INPUT)
-					writel(1<<(mdata.pin%10)*3,	__io_address (GPIO_BASE + (mdata.pin/10)*4)); //enable output 0b001
-				else if (mdata.data == MODE_OUTPUT)
+					writel((1<<(mdata.pin%10)*3 | val),	__io_address (GPIO_BASE + (mdata.pin/10)*4)); //enable output 0b001
+				//else if (mdata.data == MODE_OUTPUT)
 					// if we clear the bits above nothing needs doing here
-					writel(1<<(mdata.pin%10)*3,	__io_address (GPIO_BASE + (mdata.pin/10)*4)); //enable input 0b000
+					//writel(1<<(mdata.pin%10)*3,	__io_address (GPIO_BASE + (mdata.pin/10)*4)); //enable input 0b000
 				else
 					return -EINVAL;	//Invalid argument
 				return 0;
@@ -257,19 +264,19 @@ static int __init rpigpio_minit(void)
 {
 	struct device *dev;
 
-	printk(KERN_INFO "Startup\n");
+	printk(KERN_INFO "[gpio] Startup\n");
 	//register char device
 	std.mjr = register_chrdev(0, MOD_NAME, &gpio_fops);//character device
 	if (std.mjr < 0) {
-		printk(KERN_ALERT "Cannot Register");
+		printk(KERN_ALERT "[gpio] Cannot Register");
 		return std.mjr;
 	}
-	printk(KERN_INFO "Major #%d\n", std.mjr);
+	printk(KERN_INFO "[gpio] Major #%d\n", std.mjr);
 
 	//Create class. What does a class do? - Organizes data
 	std.cls = class_create(THIS_MODULE, "std.cls");
 	if (IS_ERR(std.cls)) {
-		printk(KERN_ALERT "Cannot get class\n");
+		printk(KERN_ALERT "[gpio] Cannot get class\n");
 		//Need to unregister
 		unregister_chrdev(std.mjr, MOD_NAME);	//Kerneldevelopes use gotos on errors
 		return PTR_ERR(std.cls);					//Gets errrno code so one can lookup the error
@@ -282,7 +289,7 @@ static int __init rpigpio_minit(void)
 	//Create Device													name of dev/spec.file
 	dev = device_create(std.cls, NULL, MKDEV(std.mjr, 0), (void*)&std, MOD_NAME);
 	if (IS_ERR(dev)) {
-		printk(KERN_ALERT "Cannot create device\n");
+		printk(KERN_ALERT "[gpio] Cannot create device\n");
 		//remove classs
 		class_destroy(std.cls);
 		//Unregister
@@ -290,8 +297,8 @@ static int __init rpigpio_minit(void)
 		return PTR_ERR(dev);
 	}
 
-	printk(KERN_INFO "RPi Version: %d\n", gpio_rpi_rev); //passing parameters
-	printk(KERN_INFO "%s Loaded\n", MOD_NAME);
+	printk(KERN_INFO "[gpio] RPi Version: %d\n", gpio_rpi_rev); //passing parameters
+	printk(KERN_INFO "[gpio] %s Loaded\n", MOD_NAME);
 
 	//init the spinlock
 	spin_lock_init(&(std.lock));
@@ -304,7 +311,7 @@ static void __exit rpigpio_mcleanup(void)
 	class_destroy(std.cls);
 	unregister_chrdev(std.mjr, MOD_NAME);
 
-	printk(KERN_NOTICE "Goodbye\n");
+	printk(KERN_NOTICE "[gpio] Goodbye\n");
 }
 
 module_init(rpigpio_minit);
