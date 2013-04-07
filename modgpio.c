@@ -157,7 +157,7 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			//@todo is there a reason we didn't check the return value of get_user?
 			get_user (pin, (int __user *) arg);
 
-			val = readl(__io_address (GPIO_BASE + GPLEV0 + pin/32)); //move to next long if pin/32 ==1
+			val = readl(__io_address (GPIO_BASE + GPLEV0 + (pin/32)*4)); //move to next long if pin/32 ==1
 			flag = val >> (pin%32); 	//right shift by the remainder
 			flag &= 0x01;				//clear upper bits
 			printk(KERN_INFO "[READ] Pin: %d Val:%d\n", pin, flag);
@@ -212,7 +212,7 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			if (pin > PIN_ARRAY_LEN || pin < 0 || pins[pin] == PIN_NULL_PID) {
 				return -EFAULT;	//Bad address
 			} else if (pins[pin] == current->pid) {
-				val = readl(__io_address (GPIO_BASE + GPLEV0 + pin/32)); //move to next long if pin/32 ==1
+				val = readl(__io_address (GPIO_BASE + GPLEV0 + (pin/32)*4)); //move to next long if pin/32 ==1
 				flag = val >> (pin%32); 	//right shift by the remainder
 				flag &= 0x01;				//clear upper bits
 				printk(KERN_DEBUG "[TOGGLE] Pin:%d From:%.1d To:%.1d\n", pin, flag, flag?0:1);
@@ -236,21 +236,21 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				printk(KERN_DEBUG "[MODE] Pin:%d From:%d\n", mdata.pin, current->pid);
 
 				//get the current value
-				val = readl(__io_address (GPIO_BASE + GPLEV0 + mdata.pin/32));
+				val = readl(__io_address (GPIO_BASE + GPLEV0 + (mdata.pin/32)*4 ));
 				//@todo: clear the three bits before writing --done //*(gpio+((g)/10)) &= ~(7<<(((g)%10)*3))
-				writel((~(7<<((mdata.pin%10)*3)) & val),	__io_address (GPIO_BASE + (mdata.pin/10)*4));
-
+				writel((~(0x3<<((mdata.pin%10)*3)) & val),	__io_address (GPIO_BASE + (mdata.pin/10)*4));
+				//~(7<<((mdata.pin%10)*3))
 				//@@ Need to bitwise OR here --check
 				if (mdata.data == MODE_OUTPUT)
 					writel((1<<(mdata.pin%10)*3 | val),	__io_address (GPIO_BASE + (mdata.pin/10)*4)); //enable output 0b001
 				//else if (mdata.data == MODE_INPUT)
 					// if we clear the bits above nothing needs doing here
 					//writel(1<<(mdata.pin%10)*3,	__io_address (GPIO_BASE + (mdata.pin/10)*4)); //enable input 0b000
-				else
+				else if (mdata.data != MODE_INPUT) //as input is a concequence of clearing the bits above
 					return -EINVAL;	//Invalid argument
 				return 0;
 			}
-			return -EFAULT;	//Bad address??
+			return -EACCES;	//Permission denied
 
 		default:
 			return -ENOTTY;	//Error Message: inappropriate IOCTL for device

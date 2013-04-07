@@ -109,7 +109,7 @@ int main(int argc, char * argv[])
 			if (ret < 0)
 				perror("ioctl");
 			else
-				printf("Toggled pin %d\n", pin);
+				printf("Toggled pin %d to %d\n", v, pin);
 		} else
 		if ((buf[0]=='m')||(buf[0]=='M')) {
 			if (buf[1] == ' ')
