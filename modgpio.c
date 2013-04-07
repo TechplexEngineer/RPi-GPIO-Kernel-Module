@@ -15,7 +15,7 @@
 
 // #include <linux/interrupt.h>//so we can sleep!
 // #include <linux/wait.h>
-// #include <linux/sched.h>
+#include <linux/sched.h>		//for current->pid
 
 #include "modgpio.h"
 
@@ -27,6 +27,54 @@
 static int st_open(struct inode *inode, struct file *filp);
 static int st_release(struct inode *inode, struct file *filp);
 static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+
+
+#define PIN_NULL_PID 5	//signifies not a valid pin. Unsigned number
+#define PIN_UNASSN 0	//signifies pin available
+#define PIN_ARRAY_LEN 32
+uint32_t pins[PIN_ARRAY_LEN] = {			//note this is for rpiv2
+	PIN_NULL_PID,
+	PIN_NULL_PID,
+	PIN_UNASSN,	//pin 2
+	PIN_UNASSN,	//pin 3
+	PIN_UNASSN,	//pin 4
+	PIN_NULL_PID,
+	PIN_NULL_PID,
+	PIN_UNASSN,	//pin 7
+	PIN_UNASSN,	//pin 8
+	PIN_UNASSN,	//pin 9
+	PIN_UNASSN,	//pin 10
+	PIN_UNASSN,	//pin 11
+	PIN_NULL_PID,
+	PIN_NULL_PID,
+	PIN_UNASSN,	//pin 14
+	PIN_UNASSN,	//pin 15
+	PIN_NULL_PID,
+	PIN_UNASSN,	//pin 17
+	PIN_UNASSN,	//pin 18
+	PIN_NULL_PID,
+	PIN_NULL_PID,
+	PIN_NULL_PID,
+	PIN_UNASSN,	//pin 22
+	PIN_UNASSN,	//pin 23
+	PIN_UNASSN,	//pin 24
+	PIN_UNASSN,	//pin 25
+	PIN_NULL_PID,
+	PIN_UNASSN,	//pin 27
+	PIN_UNASSN,	//pin 28
+	PIN_UNASSN,	//pin 29
+	PIN_UNASSN,	//pin 30
+	PIN_UNASSN,	//pin 31
+};
+
+// //in init malloc a struct
+// // int pin
+// // int procid
+// // if the ptr is null its not assiginable
+
+// int validPins[] {
+// 	2, 3, 4, 7, 8, 9, 10, 11, 14, 15, 17, 18, 22, 23, 24, 25, 27, 28, 29, 30, 31,
+// }
 
 //Global variables:
 struct gpiomod_data {
@@ -58,6 +106,7 @@ module_param(gpio_rpi_rev, int, S_IRUSR|S_IWUSR|S_IRGRP);
 MODULE_PARM_DESC(gpio_rpi_rev, "RPi Version");
 
 //! handles user opening device special file
+//Open and release are called each time 
 static int st_open(struct inode*inode, struct file *filp)
 {
 	return 0;	//todo: why don't we have to do anything here?
@@ -66,6 +115,12 @@ static int st_open(struct inode*inode, struct file *filp)
 //! handles user closing the device special file
 static int st_release(struct inode *inode, struct file *filp)
 {
+	int i;
+	//check to see if the releasing process has any pins checked out, and free them
+	for (i=0; i<PIN_ARRAY_LEN; i++) {
+		if (pins[i] == current->pid)
+			pins[i] = PIN_UNASSN;
+	}
 	return 0;
 }
 
@@ -88,110 +143,99 @@ static int st_release(struct inode *inode, struct file *filp)
 //! Processes IOCTL calls
 static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-	char pin;
-	// uint32_t addy;
-	uint32_t test;
-	uint8_t temp;
-	uint32_t currVal;
-	struct gpio_data_write wdata;
-	pin = 17;
+	int pin;	//used in read, request, free
+	unsigned long ret;	//return value for copy to/from user
+	uint32_t val;
+	uint8_t flag;
+	//uint32_t currVal;
+	struct gpio_data_write wdata;	//write data
+	struct gpio_data_mode  mdata;	//mode data
 	switch (cmd) {
 		case GPIO_READ:
-			get_user (pin, (char __user *) arg);
-			printk(KERN_INFO "Pin to read: %d\n", pin);
+			//@todo is there a reason we didn't check the return value of get_user?
+			get_user (pin, (int __user *) arg);
 
-			test = readl(__io_address (GPIO_BASE + 0x34 + pin/32)); //move to next long if pin/32 ==1
-			temp = test >> (pin%32); 	//right shift by the remainder
-			temp &= 0x01;				//clear upper bits
-			printk(KERN_INFO "Test: 0x%.8lX Temp: 0x%x\n",test, temp);
+			val = readl(__io_address (GPIO_BASE + GPLEV0 + pin/32)); //move to next long if pin/32 ==1
+			flag = val >> (pin%32); 	//right shift by the remainder
+			flag &= 0x01;				//clear upper bits
+			printk(KERN_INFO "[READ] Pin: %d Val:%d\n", pin, flag);
+			//printk(KERN_DEBUG "Test: 0x%.8lX Temp: 0x%x\n",val, flag);
+			put_user(flag, (uint8_t __user *)arg);
 
 			return 0;
 		case GPIO_WRITE:
-
-			//get_user (wdata, (struct gpio_data_write __user *) arg);
-			copy_from_user(&wdata, arg, sizeof(struct gpio_data_write));
+			//Check permissions
+			ret = copy_from_user(&wdata, (struct gpio_data_write __user *)arg, sizeof(struct gpio_data_write));
+			if (ret != 0) {
+				printk(KERN_DEBUG "[WRITE] Error copying data from userspace\n");
+				return -EFAULT;
+			}
+			if (pins[wdata.pin] != current->pid) { //make sure the process has it checked out
+				return -EACCES;	//Permission denied
+			}
 			printk(KERN_INFO "[WRITE] Pin: %d Val:%d\n", wdata.pin, wdata.data);
 
-			//enable output
-			writel (1<<(pin%10)*3,	__io_address (GPIO_BASE + (pin/10)*4));
-			printk(KERN_INFO "val: 0x%lX addy: 0x%lX\n",1<<(pin%10)*3 ,__io_address (GPIO_BASE + (pin/10)*4));
-			//turn on
-			//currVal = readl(__io_address (GPIO_BASE + 0x34 + pin/32));
 			if (wdata.data == 1)//set
-				writel (1<<pin,	__io_address (GPIO_BASE + GPSET0));
+				writel (1<<wdata.pin,	__io_address (GPIO_BASE + GPSET0));
 			else //clear
-				writel (1<<pin,	__io_address (GPIO_BASE + GPCLR0));
-			
-			printk(KERN_INFO "val2: 0x%lX addy2: 0x%lX\n", currVal, __io_address (GPIO_BASE + 0x1C));
+				writel (1<<wdata.pin,	__io_address (GPIO_BASE + GPCLR0));
+
+			//printk(KERN_INFO "val2: 0x%lX addy2: 0x%lX\n", currVal, __io_address (GPIO_BASE + 0x1C));
 			return 0;
 		case GPIO_REQUEST:
+			//@todo Need some locking here
+			get_user (pin, (int __user *) arg);
+			if (pin > PIN_ARRAY_LEN || pin < 0 || pins[pin] == PIN_NULL_PID) {
+				return -EFAULT;	//Bad address
+			} else if (pins[pin] == PIN_UNASSN) {
+				pins[pin] = current->pid;
+				printk(KERN_DEBUG "[REQUEST] Pin:%d Assn To:%d\n", pin, current->pid);
+				return 0;
+			}
+			return -EBUSY;	//Device or resource busy
+
 		case GPIO_FREE:
+			get_user (pin, (int __user *) arg);
+			if (pin > PIN_ARRAY_LEN || pin < 0 || pins[pin] == PIN_NULL_PID) {
+				return -EFAULT;	//Bad address
+			} else if (pins[pin] == current->pid) {
+				pins[pin] = PIN_UNASSN;
+				printk(KERN_DEBUG "[FREE] Pin:%d From:%d\n", pin, current->pid);
+				return 0;
+			}
+			return -EFAULT;	//Bad address??
 		case GPIO_TOGGLE:
+			///check for write perms, else die
+			// read the current value
+			// toggle the bit
+			// write the value
+			return 0;
 		case GPIO_MODE:
+			ret = copy_from_user(&mdata, (struct gpio_data_mode __user *)arg, sizeof(struct gpio_data_mode));
+			if (ret != 0) {
+				printk(KERN_DEBUG "[MODE] Error copying data from userspace\n");
+				return -EFAULT;
+			}
+			if (mdata.pin > 31 || mdata.pin < 0 || pins[mdata.pin] == PIN_NULL_PID) {
+				return -EFAULT;	//Bad address
+			} else if (pins[mdata.pin] == current->pid) { //make sure we have access
+				printk(KERN_DEBUG "[MODE] Pin:%d From:%d\n", mdata.pin, current->pid);
+				//@todo: clear the three bits before writing //*(gpio+((g)/10)) &= ~(7<<(((g)%10)*3))
+				//@@ Need to bitwise OR here
+				if (mdata.data == MODE_INPUT)
+					writel(1<<(mdata.pin%10)*3,	__io_address (GPIO_BASE + (mdata.pin/10)*4)); //enable output 0b001
+				else if (mdata.data == MODE_OUTPUT)
+					// if we clear the bits above nothing needs doing here
+					writel(1<<(mdata.pin%10)*3,	__io_address (GPIO_BASE + (mdata.pin/10)*4)); //enable input 0b000
+				else
+					return -EINVAL;	//Invalid argument
+				return 0;
+			}
+			return -EFAULT;	//Bad address??
+
 		default:
 			return -ENOTTY;	//Error Message: inappropriate IOCTL for device
 	}
-	// uint64_t st, st_next;
-	// uint32_t cmp;
-	// DEFINE_WAIT(waiter); //add ourselves to wait queue
-	// uint32_t	val;
-	// struct stll *n = NULL;
-
-	// st = readl(__io_address(ST_BASE + 0x04));
-
-	// switch (cmd) {
-	// 	case SYSTIMER_DELAY:
-	// 		if (filp->f_flags&O_NONBLOCK) {
-	// 			return -EAGAIN;					//tell the user this call would block
-	// 		}
-	// 		get_user (cmp, (uint32_t __user *) arg);
-	// 		st_next = st + cmp;
-	// 		stll_insert (std.st_timell, st_next);
-
-	// 		n = stll_first (std.st_timell);
-
-	// 		spin_lock (&(std.lock));
-	// 		// Masking 64 to 32bit :: chop off the upper bits as the cmp register is only 32 bits
-	// 		writel ((n->next->t) & 0xFFFFFFFF,	__io_address (ST_BASE + 0x10));
-
-	// 		spin_unlock (&(std.lock));
-
-	// 		while (readl(__io_address(ST_BASE+0x04)) < st_next) { //(systimer value < next interrupt)
-
-	// 			prepare_to_wait(&(std.st_wq), &waiter, TASK_INTERRUPTIBLE);
-	// 			if (readl(__io_address(ST_BASE+0x04)) < st_next) {
-	// 				schedule();//go to sleep
-	// 			}
-	// 			finish_wait(&std.st_wq, &waiter);
-	// 			if (signal_pending(current)) {	//current is a pointer to current process (this)
-	// 				stll_delete (std.st_timell, st_next);
-	// 				return -ERESTARTSYS;//ctrl+c
-	// 			}
-	// 		}
-	// 		stll_delete (std.st_timell, st_next);
-	// 		return 0;
-	// 	case SYSTIMER_READ:
-	// 		put_user(st, (uint64_t __user *)arg);	//this is potentially problemsome, why?
-	// 		return 0;
-
-	// 	case SYSTIMER_LL_FIRST:
-	// 		n = stll_first(std.st_timell);
-	// 		put_user(n->t, (uint64_t __user *)arg);
-	// 		return 0;
-	// 	case SYSTIMER_ll_PRINT:
-	// 		stll_print(std.st_timell);	//this prints to the syslog
-	// 		return 0;
-	// 	case SYSTIMER_ll_INS:
-	// 		get_user(val, (uint32_t __user *)arg);
-	// 		stll_insert(std.st_timell, val);
-	// 		return 0;
-	// 	case SYSTIMER_ll_DEL:
-	// 		get_user(val, (uint32_t __user *)arg);
-	// 		stll_delete(std.st_timell, val);
-	// 		return 0;
-	// }
-	// //	return -EINVAL; //Error Message: invalid argument
-	// return -ENOTTY;	//Error Message: inappropriate IOCTL for device
 }
 
 //! Sets permissions correctly on created device special file

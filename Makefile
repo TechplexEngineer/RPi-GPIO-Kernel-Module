@@ -21,6 +21,9 @@ kclean:
 client:
 	$(MAKE) -C $(CODE_DIR)
 
+cclean:
+	$(MAKE) -C $(CODE_DIR) clean
+
 install: all
 	sudo insmod modgpio.ko
 
