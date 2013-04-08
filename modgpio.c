@@ -98,7 +98,7 @@ module_param(gpio_rpi_rev, int, S_IRUSR|S_IWUSR|S_IRGRP);
 MODULE_PARM_DESC(gpio_rpi_rev, "RPi Version");
 
 //! handles user opening device special file
-//Open and release are called each time 
+//Open and release are called each time
 static int st_open(struct inode*inode, struct file *filp)
 {
 	return 0;	//todo: why don't we have to do anything here?
@@ -109,39 +109,29 @@ static int st_release(struct inode *inode, struct file *filp)
 {
 	int i;
 	//check to see if the releasing process has any pins checked out, and free them
+	spin_lock(&std.lock);
 	for (i=0; i<PIN_ARRAY_LEN; i++) {
 		if (std.pins[i] == current->pid) {
 			printk(KERN_DEBUG "[FREE] Pin:%d From:%d\n", i, current->pid);
 			std.pins[i] = PIN_UNASSN;
 		}
 	}
+	spin_unlock(&std.lock);
 	return 0;
 }
 
-#define GPFSEL0 0x00
-#define GPFSEL1 0x04
-#define GPFSEL2 0x08
-#define GPFSEL3 0x0C
-#define GPFSEL4 0x10
-#define GPFSEL5 0x14
-
+//memory location defines
 #define GPSET0 0x1C
-#define GPSET1 0x20
-
 #define GPCLR0 0x28
-#define GPCLR1 0x2C
-
 #define GPLEV0 0x34
-#define GPLEV1 0x38
 
-//! Processes IOCTL calls
+//! Processes incomming IOCTL calls
 static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
-	int pin;	//used in read, request, free
+	int pin;			//used in read, request, free
 	unsigned long ret;	//return value for copy to/from user
 	uint32_t val;
 	uint8_t flag;
-	//uint32_t currVal;
 	struct gpio_data_write wdata;	//write data
 	struct gpio_data_mode  mdata;	//mode data
 	switch (cmd) {
@@ -152,8 +142,7 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			val = readl(__io_address (GPIO_BASE + GPLEV0 + (pin/32)*4)); //move to next long if pin/32 ==1
 			flag = val >> (pin%32); 	//right shift by the remainder
 			flag &= 0x01;				//clear upper bits
-			printk(KERN_INFO "[READ] Pin: %d Val:%d\n", pin, flag);
-			//printk(KERN_DEBUG "Test: 0x%.8lX Temp: 0x%x\n",val, flag);
+			printk(KERN_DEBUG "[READ] Pin: %d Val:%d\n", pin, flag);
 			put_user(flag, (uint8_t __user *)arg);
 
 			return 0;
@@ -164,82 +153,100 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				printk(KERN_DEBUG "[WRITE] Error copying data from userspace\n");
 				return -EFAULT;
 			}
+			spin_lock(&std.lock);
 			if (std.pins[wdata.pin] != current->pid) { //make sure the process has it checked out
+				spin_unlock(&std.lock);
 				return -EACCES;	//Permission denied
 			}
+			spin_unlock(&std.lock);
 			printk(KERN_INFO "[WRITE] Pin: %d Val:%d\n", wdata.pin, wdata.data);
-			printk(KERN_DEBUG "info: %lX\n", __io_address (GPIO_BASE + GPSET0));
 
-			if (wdata.data == 1)//set
+			if (wdata.data == 1)
 				writel (1<<wdata.pin,	__io_address (GPIO_BASE + GPSET0));
-			else //clear
+			else
 				writel (1<<wdata.pin,	__io_address (GPIO_BASE + GPCLR0));
 
-			//printk(KERN_INFO "val2: 0x%lX addy2: 0x%lX\n", currVal, __io_address (GPIO_BASE + 0x1C));
 			return 0;
 		case GPIO_REQUEST:
-			//@todo Need some locking here
 			get_user (pin, (int __user *) arg);
-			if (pin > PIN_ARRAY_LEN || pin < 0 || std.pins[pin] == PIN_NULL_PID) {
+			spin_lock(&std.lock);
+			if (pin > PIN_ARRAY_LEN || pin < 0 || std.pins[pin] == PIN_NULL_PID) { //validate pins
+				spin_unlock(&std.lock);
 				return -EFAULT;	//Bad address
-			} else if (std.pins[pin] == PIN_UNASSN) {
-				std.pins[pin] = current->pid;
-				printk(KERN_DEBUG "[REQUEST] Pin:%d Assn To:%d\n", pin, current->pid);
-				return 0;
+			} else if (std.pins[pin] != PIN_UNASSN) { //make sure pin is unassigined
+				spin_unlock(&std.lock);
+				return -EBUSY;	//Device or resource busy
 			}
-			return -EBUSY;	//Device or resource busy
+			std.pins[pin] = current->pid;
+			spin_unlock(&std.lock);
+			printk(KERN_DEBUG "[REQUEST] Pin:%d Assn To:%d\n", pin, current->pid);
+			return 0;
+
 
 		case GPIO_FREE:
 			get_user (pin, (int __user *) arg);
-			if (pin > PIN_ARRAY_LEN || pin < 0 || std.pins[pin] == PIN_NULL_PID) {
+			spin_lock(&std.lock);
+			if (pin > PIN_ARRAY_LEN || pin < 0 || std.pins[pin] == PIN_NULL_PID) { //validate pins
+				spin_unlock(&std.lock);
 				return -EFAULT;	//Bad address
-			} else if (std.pins[pin] == current->pid) {
-				std.pins[pin] = PIN_UNASSN;
-				printk(KERN_DEBUG "[FREE] Pin:%d From:%d\n", pin, current->pid);
-				return 0;
+			} else if (std.pins[pin] != current->pid) { //check access
+				spin_unlock(&std.lock);
+				return -EACCES;	//Permission denied
 			}
-			return -EFAULT;	//Bad address??
+			std.pins[pin] = PIN_UNASSN;
+			spin_unlock(&std.lock);
+			printk(KERN_DEBUG "[FREE] Pin:%d From:%d\n", pin, current->pid);
+			return 0;
+
 		case GPIO_TOGGLE:
 			get_user (pin, (int __user *) arg);
-			///check for write perms, else die
-			if (pin > PIN_ARRAY_LEN || pin < 0 || std.pins[pin] == PIN_NULL_PID) {
+			spin_lock(&std.lock);
+			if (pin > PIN_ARRAY_LEN || pin < 0 || std.pins[pin] == PIN_NULL_PID) { //validate pins
+				spin_unlock(&std.lock);
 				return -EFAULT;	//Bad address
-			} else if (std.pins[pin] == current->pid) {
-				val = readl(__io_address (GPIO_BASE + GPLEV0 + (pin/32)*4)); //move to next long if pin/32 ==1
-				flag = val >> (pin%32); 	//right shift by the remainder
-				flag &= 0x01;				//clear upper bits
-				printk(KERN_DEBUG "[TOGGLE] Pin:%d From:%.1d To:%.1d\n", pin, flag, flag?0:1);
-				if (flag != 1)//set
-					writel (1<<pin,	__io_address(GPIO_BASE + GPSET0));
-				else //clear
-					writel (1<<pin,	__io_address(GPIO_BASE + GPCLR0));
-				put_user(flag?0:1, (uint8_t __user *)arg);
-				return 0;
+			} else if (std.pins[pin] != current->pid) { //check access
+				spin_unlock(&std.lock);
+				return -EACCES;	//Permission denied
 			}
-			return -EACCES;	//Permission denied
-		case GPIO_MODE:
+			spin_unlock(&std.lock);
+			val = readl(__io_address (GPIO_BASE + GPLEV0 + (pin/32)*4)); //move to next long if pin/32 ==1
+			flag = val >> (pin%32); 	//right shift by the remainder
+			flag &= 0x01;				//clear upper bits
+			printk(KERN_DEBUG "[TOGGLE] Pin:%d From:%.1d To:%.1d\n", pin, flag, flag?0:1);
+			if (flag != 1)//set
+				writel (1<<pin,	__io_address(GPIO_BASE + GPSET0));
+			else //clear
+				writel (1<<pin,	__io_address(GPIO_BASE + GPCLR0));
+			put_user(flag?0:1, (uint8_t __user *)arg);
+			return 0;
 
+		case GPIO_MODE:
 			ret = copy_from_user(&mdata, (struct gpio_data_mode __user *)arg, sizeof(struct gpio_data_mode));
 			if (ret != 0) {
 				printk(KERN_DEBUG "[MODE] Error copying data from userspace\n");
 				return -EFAULT;
 			}
-			//validate pin
-			if (mdata.pin > 31 || mdata.pin < 0 || std.pins[mdata.pin] == PIN_NULL_PID) {
+			spin_lock(&std.lock);
+			if (mdata.pin > 31 || mdata.pin < 0 || std.pins[mdata.pin] == PIN_NULL_PID) { //Validate Pin
+				spin_unlock(&std.lock);
 				return -EFAULT;	//Bad address
-			} else if (std.pins[mdata.pin] == current->pid) { //make sure we have access
-				if(mdata.data == MODE_INPUT) {
-					writel(~(7<<((mdata.pin %10)*3)) & readl(__io_address(GPIO_BASE + (0x04)*(mdata.pin /10))), __io_address(GPIO_BASE + (0x04)*(mdata.pin/10))); // Set as input 
-					printk(KERN_DEBUG "GPIO - Pin %d set as Input\n", mdata.pin);
-				} else if (mdata.data == MODE_OUTPUT) {
-					//printk(KERN_DEBUG "GPIO - Writing %lx to %lx - val: %lx\n", (val & ~(7<<(((gtmp->pin)%10)*3))), __io_address(GPIO_BASE + (0x04)*(pin/10)), val);
-					writel(~(7<<((mdata.pin %10)*3)) & readl(__io_address(GPIO_BASE + (0x04)*(mdata.pin /10))), __io_address(GPIO_BASE + (0x04)*(mdata.pin/10))); // Set as input to bit clear
-					writel(1<<((mdata.pin % 10)*3) | readl(__io_address(GPIO_BASE + (0x04)*(mdata.pin/10))), __io_address(GPIO_BASE + (0x04)*(mdata.pin/10)));    // Set pin as output
-					printk(KERN_DEBUG "GPIO - Pin %d set as Output\n", mdata.pin);
-				}
-				return 0;
+			} else if (std.pins[mdata.pin] != current->pid) { //check access
+				spin_unlock(&std.lock);
+				return -EACCES;	//Permission denied
 			}
-			return -EACCES;	//Permission denied
+			spin_unlock(&std.lock);
+
+			//clear the bits (sets to input)
+			writel(~(7<<((mdata.pin %10)*3)) & readl(__io_address(GPIO_BASE + (0x04)*(mdata.pin /10))), __io_address(GPIO_BASE + (0x04)*(mdata.pin/10)));
+			if(mdata.data == MODE_INPUT) {
+				printk(KERN_DEBUG "[MODE] Pin %d set as Input\n", mdata.pin);
+			} else if (mdata.data == MODE_OUTPUT) {
+				writel(1<<((mdata.pin % 10)*3) | readl(__io_address(GPIO_BASE + (0x04)*(mdata.pin/10))), __io_address(GPIO_BASE + (0x04)*(mdata.pin/10)));    // Set pin as output
+				printk(KERN_DEBUG "[MODE] Pin %d set as Output\n", mdata.pin);
+			} else {
+				return -EINVAL;	//Invalid argument
+			}
+			return 0;
 
 		default:
 			return -ENOTTY;	//Error Message: inappropriate IOCTL for device
@@ -274,12 +281,11 @@ static int __init rpigpio_minit(void)
 	}
 	printk(KERN_INFO "[gpio] Major #%d\n", std.mjr);
 
-	//Create class. What does a class do? - Organizes data
 	std.cls = class_create(THIS_MODULE, "std.cls");
 	if (IS_ERR(std.cls)) {
 		printk(KERN_ALERT "[gpio] Cannot get class\n");
 		//Need to unregister
-		unregister_chrdev(std.mjr, MOD_NAME);	//Kerneldevelopes use gotos on errors
+		unregister_chrdev(std.mjr, MOD_NAME);
 		return PTR_ERR(std.cls);					//Gets errrno code so one can lookup the error
 	}
 
