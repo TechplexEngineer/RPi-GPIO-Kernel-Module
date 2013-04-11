@@ -144,27 +144,3 @@ int main(int argc, char * argv[])
 	close(fd);
 	return 0;
 }
-// if ((buf[0]=='i')||(buf[0]=='I')) {
-		// 	ret = ioctl(fd, SYSTIMER_ll_INS, &v);
-		// 	if (ret < 0) {
-		// 		perror("ioctl");
-		// 	}
-		// } else if ((buf[0]=='d')||(buf[0]=='D')) {
-		// 	ret = ioctl(fd, SYSTIMER_ll_DEL, &v);
-		// 	if (ret < 0) {
-		// 		perror("ioctl");
-		// 	}
-		// } else if ((buf[0]=='w')||(buf[0]=='W')) {
-		// 	ret = ioctl(fd, SYSTIMER_DELAY, &v);
-		// 	if (ret < 0) {
-		// 		perror("ioctl");
-		// 	}
-		// 	printf("Wait: %lu\n", v);
-		// } else 
-// if((buf[0]=='p')||(buf[0]=='P')) {
-		// 	// Print the list
-		// 	ret = ioctl(fd, SYSTIMER_ll_PRINT);
-		// 	if (ret < 0) {
-		// 		perror("ioctl");
-		// 	}
-		// } else 
