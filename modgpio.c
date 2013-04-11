@@ -79,9 +79,6 @@ static struct gpiomod_data std = {
 	}
 };
 
-//parameter
-static int gpio_rpi_rev = 2; //version of the rpi
-
 //Device special files have two numbers associated with them
 // -major index into array
 static const struct file_operations gpio_fops = {
@@ -91,15 +88,13 @@ static const struct file_operations gpio_fops = {
 	.unlocked_ioctl = st_ioctl,
 };
 
-//! allow for parameters when inserting the module
-module_param(gpio_rpi_rev, int, S_IRUSR|S_IWUSR|S_IRGRP);
-MODULE_PARM_DESC(gpio_rpi_rev, "RPi Version");
+
 
 //! handles user opening device special file
 //Open and release are called each time
 static int st_open(struct inode*inode, struct file *filp)
 {
-	return 0;	//todo: why don't we have to do anything here?
+	return 0;
 }
 
 //! handles user closing the device special file
@@ -134,7 +129,6 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	struct gpio_data_mode  mdata;	//mode data
 	switch (cmd) {
 		case GPIO_READ:
-			//@todo is there a reason we didn't check the return value of get_user?
 			get_user (pin, (int __user *) arg);
 
 			val = readl(__io_address (GPIO_BASE + GPLEV0 + (pin/32)*4)); //move to next long if pin/32 ==1
@@ -323,8 +317,6 @@ static int __init rpigpio_minit(void)
 		unregister_chrdev(std.mjr, MOD_NAME);
 		return PTR_ERR(dev);
 	}
-
-	printk(KERN_INFO "[gpio] RPi Version: %d\n", gpio_rpi_rev); //passing parameters
 	printk(KERN_INFO "[gpio] %s Loaded\n", MOD_NAME);
 
 	//init the spinlock
