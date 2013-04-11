@@ -11,25 +11,23 @@
 #include <asm/uaccess.h>	//translation from userspace ptr to kernelspace
 #include <mach/platform.h>	//pull address of system timer
 
-#include <linux/types.h>
+#include <linux/types.h>	//uintxx_t
 
-// #include <linux/interrupt.h>//so we can sleep!
-// #include <linux/wait.h>
-#include <linux/sched.h>		//for current->pid
+#include <linux/sched.h>	//for current->pid
 
 #include "modgpio.h"
 
-#define RPIGPIO_MOD_AUTH "Techplex"
+#define RPIGPIO_MOD_AUTH "Techplex_Engineer"
 #define RPIGPIO_MOD_DESC "GPIO access control for Raspberry Pi"
 #define RPIGPIO_MOD_SDEV "RPiGPIO" 		//supported devices
-#define MOD_NAME "rpigpio" //name of the device file
+#define MOD_NAME "rpigpio" 				//name of the device file
 
 static int st_open(struct inode *inode, struct file *filp);
 static int st_release(struct inode *inode, struct file *filp);
 static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 
 
-#define PIN_NULL_PID 5	//signifies not a valid pin. Unsigned number
+#define PIN_NULL_PID 1	//signifies not a valid pin. Unsigned number
 #define PIN_UNASSN 0	//signifies pin available
 #define PIN_ARRAY_LEN 32
 
@@ -247,7 +245,29 @@ static long st_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				return -EINVAL;	//Invalid argument
 			}
 			return 0;
+		case GPIO_SET:
+		case GPIO_CLR:
 
+			get_user (pin, (int __user *) arg);
+			spin_lock(&std.lock);
+			if (pin > PIN_ARRAY_LEN || pin < 0 || std.pins[pin] == PIN_NULL_PID) { //validate pins
+				spin_unlock(&std.lock);
+				return -EFAULT;	//Bad address
+			} else if (std.pins[pin] != current->pid) { //check access
+				spin_unlock(&std.lock);
+				return -EACCES;	//Permission denied
+			}
+			spin_unlock(&std.lock);
+
+			if (cmd == GPIO_SET) {
+				writel (1<<pin,	__io_address (GPIO_BASE + GPSET0));
+				printk(KERN_INFO "[SET] Pin: %d\n", pin);
+			} else {
+				writel (1<<pin,	__io_address (GPIO_BASE + GPCLR0));
+				printk(KERN_INFO "[CLR] Pin: %d\n", pin);
+			}
+
+			return 0;
 		default:
 			return -ENOTTY;	//Error Message: inappropriate IOCTL for device
 	}

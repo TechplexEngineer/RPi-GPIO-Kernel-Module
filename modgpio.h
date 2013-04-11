@@ -23,6 +23,8 @@ struct gpio_data_mode {
 
 #define GPIO_TOGGLE			_IOWR(GPIO_IOC_MAGIC, 0x94, int) //in: pin to toggle			//out: new value
 #define GPIO_MODE			_IOW(GPIO_IOC_MAGIC, 0x95, struct gpio_data_mode) //in: struct (pin, mode[i/o])
+#define GPIO_SET			_IOW(GPIO_IOC_MAGIC, 0x96, int)	//set the pin (same as write 1)
+#define GPIO_CLR			_IOW(GPIO_IOC_MAGIC, 0x97, int) //clear the pin (same as write 0)
 
 
 
