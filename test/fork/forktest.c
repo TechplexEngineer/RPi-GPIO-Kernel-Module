@@ -5,7 +5,7 @@
  *
  * @author Blake Bourque
  *
- * @date 2/11/13
+ * @date 4/8/13
  *
  * Uses two children to test locking in the GPIO kernel module by requesting the same pins.
  *
@@ -122,6 +122,18 @@ void child(int fd) {
 			perror("ioctl");
 		else
 			printf("Reserved pin %d\n", t);
+	}
+	//set as output
+	for (i=0; i<NUM_PINS; i++) {
+		t=pins[i];
+		mydmstruct.pin = t;
+		mydmstruct.data = MODE_OUTPUT;
+
+		ret = ioctl(fd, GPIO_MODE, &mydmstruct);
+		if (ret < 0)
+			perror("ioctl");
+		else
+			printf("Set pin %d as OUTPUT\n", t);
 	}
 	for (j=0; j<4; j++) {
 		//toggle pins
