@@ -1,3 +1,16 @@
+/*!
+ * @file gpioclient.c
+ *
+ * @brief Client app for user testing
+ *
+ * @author Blake Bourque
+ *
+ * @date 4/8/13
+ *
+ * reads commands from user and calls corresponding ioctl and prints the result.
+ *
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -13,46 +26,56 @@
 
 #include "modgpio.h"
 
+ /*!
+ * \brief Makes ioctl calls based on user input
+ *
+ * Users can enter any of the characters represented in the regex: /[RWCFTMQ]/i
+ * Commands are in the format <ctrl char> <val1> <val2?>
+ * val2 is not optional, but only used when writing or changing mode.
+ *
+ * \param[in]			argc		unused
+ * \param[in]			argv		unused
+ *
+ * \returns	 			0 unless an error occurs
+ */
 int main(int argc, char * argv[])
 {
 	int fd;
 	int ret;
-	//char * fret=NULL;
 	int v=0;
 	int pin = 17;
-	//uint64_t c=0;
 	char* buf = NULL;
 	char *found = NULL;
+	struct gpio_data_write mydwstruct;
+	struct gpio_data_mode mydmstruct;
 
 	using_history();
 
-	fd = open("/dev/rpigpio", O_RDONLY); ///hmm, if read only howcome write works?
+	fd = open("/dev/rpigpio", O_RDONLY);
 	if(!fd) {
 		perror("open(O_RDONLY)");
 		return errno;
 	}
 
-	//printf("[I]nsert or [D]elete or [Q]uit. FMT: I 2 \n");
-	//printf("[W]ait or [R]ead or [P]rint \n");
 	printf("[R]ead [W]rite [C]heckout [F]ree [T]oggle [M]ode [Q]uit\n");
 
 	while (1) {
 		if (buf != NULL)
 			free(buf);
-		// Get new item/ delete item
+		// Get new item / delete item
 		buf = readline ("\e[01;34mCommand:\e[00m ");
 		if (buf == NULL) {
 			break;	//NULL on eof
 		}
 		add_history(buf);
 
+		//accept commands without a space between ctrl char and value
 		if (buf[1] == ' ')
 			v=atoi(&buf[2]);
 		else
 			v=atoi(&buf[1]);
 
 		// Action based on input
-
 		if ((buf[0]=='r')||(buf[0]=='R')) {
 			pin = v;
 			ret = ioctl(fd, GPIO_READ, &pin);
@@ -71,13 +94,10 @@ int main(int argc, char * argv[])
 				printf("Missing 2nd parameter. Usage \"w <val> <pin>\"\n");
 				continue;
 			}
+			pin = atoi(found);
+			mydwstruct.pin = pin;
+			mydwstruct.data = v;
 
-			pin = atoi(found);//17;//get from user
-
-			struct gpio_data_write mydwstruct = {								//@todo Sheaff won't like this
-				.pin = pin, //ideally we'd get both from the user
-				.data = v,
-			};
 			ret = ioctl(fd, GPIO_WRITE, &mydwstruct);
 			if (ret < 0)
 				perror("ioctl");
@@ -85,7 +105,6 @@ int main(int argc, char * argv[])
 				printf("Wrote %d to pin %d\n",mydwstruct.data, mydwstruct.pin);
 		} else
 		if ((buf[0]=='c')||(buf[0]=='C')) {
-			//printf("v: %d\n",v);
 			pin = v;
 			ret = ioctl(fd, GPIO_REQUEST, &pin);
 			if (ret < 0)
@@ -94,7 +113,6 @@ int main(int argc, char * argv[])
 				printf("Reserved pin %d\n", pin);
 		} else
 		if ((buf[0]=='f')||(buf[0]=='F')) {
-			// printf("v: %d\n",v);
 			pin = v;
 			ret = ioctl(fd, GPIO_FREE, &pin);
 			if (ret < 0)
@@ -103,7 +121,6 @@ int main(int argc, char * argv[])
 				printf("Freed pin %d\n", pin);
 		} else
 		if ((buf[0]=='t')||(buf[0]=='T')) {
-			// printf("pin: %d\n",v);
 			pin = v;
 			ret = ioctl(fd, GPIO_TOGGLE, &pin);
 			if (ret < 0)
@@ -121,12 +138,11 @@ int main(int argc, char * argv[])
 				continue;
 			}
 
-			pin = atoi(found);//17;//get from user
+			pin = atoi(found);
 
-			struct gpio_data_mode mydmstruct = {								//OR THIS!
-				.pin = pin, //ideally we'd get both from the user
-				.data = v?MODE_OUTPUT:MODE_INPUT,
-			};
+			mydmstruct.pin = pin;
+			mydmstruct.data = v?MODE_OUTPUT:MODE_INPUT;
+
 			ret = ioctl(fd, GPIO_MODE, &mydmstruct);
 			if (ret < 0)
 				perror("ioctl");
